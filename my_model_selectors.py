@@ -69,16 +69,36 @@ class SelectorBIC(ModelSelector):
     """
 
     def __init__(self, all_word_sequences: dict, all_word_Xlengths: dict, this_word: str,
-                 min_n_components=2, max_n_components=10,
+                 n_constant=3,min_n_components=2, max_n_components=10,
                  random_state=14, verbose=False):
-        super(SelectorBIC,self).__init__(all_word_sequences,all_word_Xlengths,this_word,3,min_n_components,max_n_components,random_state,verbose)
+        # call the super class init function
+        super().__init__(all_word_sequences,all_word_Xlengths,this_word,n_constant,min_n_components,max_n_components,random_state,verbose)
+
+        # save a list of the candidate models as a dictonary keyed by BIC score
         self.model_cands = dict()
+
+        # for each value of 'n' states to try, train a model for the input word and calculate the BIC score
+        # and add model to our candidates dictionary list
+
         for n in range(self.min_n_components,self.max_n_components):
             try:
                 model = self.base_model(n)
+
+                # N is the number of data points.  get that by summing up the lengths of the X vectors
                 N=math.fsum(self.lengths)
-                p = (n * (n-1)) + (n * (model.n_features-1))
+
+                # p = num params = # transprobs + # means + # covars
+                # calculate using the size of the appropriate array shapes.  There are easier, less 'generic' ways
+                # to do this of course.   Just try to be generic to the returned model
+
+                p = model.transmat_.shape[0] * model.transmat_.shape[1] + \
+                    model.means_.shape[0] * model.means_.shape[1] + \
+                    model.covars_.shape[0] * model.covars_.shape[1]
+
+                # L = the Log Likelihood score of this model
                 L =model.score(self.X,self.lengths)
+
+                # calculate the BIC score.   This uses a negative Log Likelihood, so we'll need minimize it later
                 thisscore= (-2.0 * L) + (p * math.log(N))
                 self.model_cands[thisscore] = model
             except:
@@ -93,9 +113,12 @@ class SelectorBIC(ModelSelector):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
         # TODO implement model selection based on BIC scores
+        # if we didn't get any valid model candidates, return a default model
         if len(self.model_cands) == 0:
             return self.base_model(self.min_n_components)
+        #otherwise find the minimum BIC score calculated from the candidate dictionary keys
         minscore=min(self.model_cands.keys())
+        # and return that model as the best
         return self.model_cands[minscore]
         raise NotImplementedError
 
@@ -110,23 +133,39 @@ class SelectorDIC(ModelSelector):
     '''
 
     def __init__(self, all_word_sequences: dict, all_word_Xlengths: dict, this_word: str,
-                 min_n_components=2, max_n_components=10,
+                 n_constant=3,min_n_components=2, max_n_components=10,
                  random_state=14, verbose=False):
-        super(SelectorDIC,self).__init__(all_word_sequences,all_word_Xlengths,this_word,3,min_n_components,max_n_components,random_state,verbose)
+
+        # call the super class init function
+        super().__init__(all_word_sequences,all_word_Xlengths,this_word,n_constant,min_n_components,max_n_components,random_state,verbose)
+
+        # save a list of the candidate models as a dictonary keyed by BIC score
         self.model_cands = dict()
+
+        # for each value of 'n' states to try, train a model for the input word and calculate the DIC score
+        # and add model to our candidates dictionary list
+
         for n in range(self.min_n_components,self.max_n_components):
             try:
+                # train a model for the input word and get the Log Likelihood score
+
                 model = self.base_model(n)
                 myscore =model.score(self.X,self.lengths)
+
+                # initialize variables used to calculate an average log likelihood of all the other words to get an
+                # 'anti-likelihood' score
+
                 othertotalscore = 0.0
-                othermodelcount = 0.0
                 otherwords = self.words.keys()
                 othermodelcount = len(otherwords) - 1
+                # for each other word (except the current word we're training on), get a model for it and get
+                # its log likelihood, and add into our running total
+
                 for w in otherwords:
                     if w == this_word:
                         continue
                     try:
-                        ms = ModelSelector(self.words, self.hwords, w, 3, self.min_n_components, self.max_n_components, self.random_state, self.verbose )
+                        ms = ModelSelector(self.words, self.hwords, w, self.n_constant, self.min_n_components, self.max_n_components, self.random_state, self.verbose )
                         othermodel = ms.base_model(n)
                         try:
                             otherscore = othermodel.score(ms.X, ms.lengths)
@@ -135,6 +174,9 @@ class SelectorDIC(ModelSelector):
                             pass
                     except:
                         pass
+                # calculate an average log likelihood score of all the other words and subtract it from this word log likelihood
+                # score for a final DIC score.   use the DIC value as the model candidate dictionary key
+
                 avgotherscore = othertotalscore/othermodelcount
                 thisscore = myscore - avgotherscore
                 self.model_cands[thisscore] = model
@@ -145,9 +187,12 @@ class SelectorDIC(ModelSelector):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
         # TODO implement model selection based on DIC scores
+        # if we didn't get any valid model candidates, return a default model
         if len(self.model_cands) == 0:
             return self.base_model(self.min_n_components)
+        #otherwise find the maximum DIC score calculated from the candidate dictionary keys
         maxscore=max(self.model_cands.keys())
+        # and return that model
         return self.model_cands[maxscore]
         raise NotImplementedError
 
@@ -157,29 +202,56 @@ class SelectorCV(ModelSelector):
 
     '''
     def __init__(self, all_word_sequences: dict, all_word_Xlengths: dict, this_word: str,
-                 min_n_components=2, max_n_components=10,
+                 n_constant=3,min_n_components=2, max_n_components=10,
                  random_state=14, verbose=False):
-        super(SelectorCV,self).__init__(all_word_sequences,all_word_Xlengths,this_word,3,min_n_components,max_n_components,random_state,verbose)
+
+        # call the super class init function
+        super().__init__(all_word_sequences,all_word_Xlengths,this_word,n_constant,min_n_components,max_n_components,random_state,verbose)
+
+        # save a list of the candidate models as a dictonary keyed by BIC score
         self.model_cands = dict()
+
+        # for each value of 'n' states to try, train a model for the input word and calculate the and
+        # averge the log likelihood scores for the returned training set returned for each fold split
+        # then add model to our candidates dictionary list
+
         for n in range(self.min_n_components,self.max_n_components):
+            # initialize some variables used to calculate the average log likelihood scores
             scoretotal=0.0
             avgscore = 0.0
             numscores=0
+            # find a minimum number of folds to use.  either use 3 or the number of sequences we have.
             folds=min(len(self.sequences),3)
-            split_method = KFold(folds)
-            for cv_train_idx, cv_test_idx in split_method.split(self.sequences):
-                word_sequences, word_Xlengths = combine_sequences(cv_train_idx,self.sequences)
-
+            # if we have less than 2 folds we can split into, just train a single model and use its log likelihood.
+            if folds < 2:
                 try:
                     model = self.base_model(n)
-                    thisscore=model.score(word_sequences,word_Xlengths)
-                    scoretotal += thisscore
-                    numscores += 1
+                    avgscore=model.score(self.X,self.lengths)
                 except:
                     pass
-                    model = None
-            if numscores > 0:
-                avgscore = scoretotal/numscores
+            else:
+                # otherwise, create the kfold object with an appropriate number of folds not to break the split function
+                split_method = KFold(folds)
+
+                for cv_train_idx, cv_test_idx in split_method.split(self.sequences):
+                    word_sequences, word_Xlengths = combine_sequences(cv_train_idx,self.sequences)
+
+                    try:
+                        # then for each fold split, combine the entries assigned to the training set
+                        # and use that to score the trained model against, than accumlate the returned
+                        # log likelihoods to calculate an overall average score for all the folds
+                        model = self.base_model(n)
+                        thisscore=model.score(word_sequences,word_Xlengths)
+                        scoretotal += thisscore
+                        numscores += 1
+                    except:
+                        pass
+                        model = None
+
+                # if we had at least one valid model returned, calculate the average score.
+                if numscores > 0:
+                    avgscore = scoretotal/numscores
+            # if we got at least one model,save it as a candidate keyed by the average log likelihood of the fold scores
             if model is not None:
                 self.model_cands[avgscore] = model
 
@@ -187,8 +259,11 @@ class SelectorCV(ModelSelector):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
         # TODO implement model selection using CV
+        # if we didn't get any valid model candidates, return a default model
         if len(self.model_cands) == 0:
             return self.base_model(self.min_n_components)
+        #otherwise find the maximum CV average log likelihood score calculated from the candidate dictionary keys
         maxscore=max(self.model_cands.keys())
+        # and return that model
         return self.model_cands[maxscore]
         raise NotImplementedError
