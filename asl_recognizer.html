@@ -16529,6 +16529,7 @@ Training complete for JOHN with 14 states with time 206.96585136803333 seconds
 <div class="text_cell_render border-box-sizing rendered_html">
 <p><strong>Question 2:</strong>  Compare and contrast the possible advantages and disadvantages of the various model selectors implemented.</p>
 <p><strong>Answer 2:</strong></p>
+<p>CV will get a good overall average, and with the but it does not penalize complexity the way BIC and DIC methods do.  BIC attempts to penalize complexity based on the number of parameters and data points, and it does it very quickly.  DIC penalizes those models that produce results too close the the results of competing words.   The time to perform the model training on these other words to compute the DIC for the model in question adds a very large penalty to the training time. If re-training of words does not have to be done real-time, then using DIC for more accurate results would be an advantage.  If re-training on the fly is necessary, this time overhead would preclude its use.</p>
 
 </div>
 </div>
