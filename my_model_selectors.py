@@ -223,9 +223,14 @@ class SelectorCV(ModelSelector):
             # find a minimum number of folds to use.  either use 3 or the number of sequences we have.
             folds=min(len(self.sequences),3)
             # if we have less than 2 folds we can split into, just train a single model and use its log likelihood.
+            try:
+                model = self.base_model(n)
+            except:
+                model = None
+                pass
+
             if folds < 2:
                 try:
-                    model = self.base_model(n)
                     avgscore=model.score(self.X,self.lengths)
                 except:
                     pass
@@ -240,13 +245,11 @@ class SelectorCV(ModelSelector):
                         # then for each fold split, combine the entries assigned to the training set
                         # and use that to score the trained model against, than accumlate the returned
                         # log likelihoods to calculate an overall average score for all the folds
-                        model = self.base_model(n)
                         thisscore=model.score(word_sequences,word_Xlengths)
                         scoretotal += thisscore
                         numscores += 1
                     except:
                         pass
-                        model = None
 
                 # if we had at least one valid model returned, calculate the average score.
                 if numscores > 0:
